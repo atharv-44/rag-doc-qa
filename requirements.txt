@@ -14,4 +14,4 @@ groq==0.11.0                  # Official Groq Python client (fast, free tier ava
 python-dotenv==1.0.1          # Loads .env file into os.environ automatically
 
 # Web UI — run with: streamlit run app.py
-streamlit==1.40.1             # Turns Python scripts into interactive web apps (no HTML/CSS needed)
+streamlit==1.67.0             # Turns Python scripts into interactive web apps (no HTML/CSS needed)
