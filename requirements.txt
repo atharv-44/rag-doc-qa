@@ -8,7 +8,7 @@ sentence-transformers==6.3.0  # Wraps HuggingFace models; downloads all-MiniLM-L
 chromadb==1.5.9               # Persistent vector store with cosine similarity search
 
 # LLM API
-groq==0.11.0                  # Official Groq Python client (fast, free tier available)
+groq==1.7.0                   # Official Groq Python client (fast, free tier available)
 
 # Environment variable management
 python-dotenv==1.2.4          # Loads .env file into os.environ automatically
