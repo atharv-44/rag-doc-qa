@@ -1,14 +1,17 @@
 # Core PDF reading
-pdfplumber==0.11.4          # Extracts text cleanly from PDFs (handles tables, columns)
+pdfplumber==0.11.4            # Extracts text cleanly from PDFs (handles tables, columns)
 
 # Embeddings — runs 100% locally, no API key
 sentence-transformers==3.3.1  # Wraps HuggingFace models; downloads all-MiniLM-L6-v2 automatically
 
 # Vector database — stored on disk, no server needed
-chromadb==0.5.23            # Persistent vector store with cosine similarity search
+chromadb==0.5.23              # Persistent vector store with cosine similarity search
 
 # LLM API
-groq==0.11.0                # Official Groq Python client (fast, free tier available)
+groq==0.11.0                  # Official Groq Python client (fast, free tier available)
 
 # Environment variable management
-python-dotenv==1.0.1        # Loads .env file into os.environ automatically
+python-dotenv==1.0.1          # Loads .env file into os.environ automatically
+
+# Web UI — run with: streamlit run app.py
+streamlit==1.40.1             # Turns Python scripts into interactive web apps (no HTML/CSS needed)

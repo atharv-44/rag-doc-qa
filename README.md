@@ -1,184 +1,187 @@
-# RAG-DocQA — Document Q&A with Retrieval-Augmented Generation
+# 🔍 RAG-DocQA — AI Document Q&A System
 
-A beginner-friendly, minimal RAG pipeline that lets you ask questions about your own PDF documents.  
-Everything runs locally except the final LLM call (Groq — free tier, no credit card).
+> Ask questions about your own PDF documents using a fully local RAG (Retrieval-Augmented Generation) pipeline.  
+> No OpenAI. No cloud embeddings. No black boxes — every part is explained.
 
----
-
-## What is RAG?
-
-**Retrieval-Augmented Generation** is a pattern that fixes a core problem with LLMs:  
-they only know what they were trained on, and they can hallucinate facts.
-
-RAG solves this by giving the LLM *your documents* as context at query time:
-
-```
-Your PDFs → chunks → embeddings → vector DB
-                                        ↓
-User question → embed → search DB → top-k chunks → LLM → Answer
-```
-
-The LLM reads your chunks and answers from them, not from memory.
+[![Python](https://img.shields.io/badge/Python-3.10+-blue?logo=python)](https://python.org)
+[![ChromaDB](https://img.shields.io/badge/VectorDB-ChromaDB-orange)](https://www.trychroma.com)
+[![Streamlit](https://img.shields.io/badge/UI-Streamlit-red?logo=streamlit)](https://streamlit.io)
+[![Groq](https://img.shields.io/badge/LLM-Groq%20(free)-green)](https://console.groq.com)
 
 ---
 
-## Project Structure
+## 🏗️ Architecture
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                     INGESTION  (run once)                   │
+│                                                             │
+│   PDF Files  ──►  Extract Text  ──►  Split into Chunks      │
+│                                           │                 │
+│                                     Embed (MiniLM)          │
+│                                           │                 │
+│                                     ChromaDB (disk)         │
+└─────────────────────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────────────────────┐
+│                     QUERY  (every question)                 │
+│                                                             │
+│   User Question  ──►  Embed Question                        │
+│                              │                              │
+│                        ChromaDB Search                      │
+│                        (cosine similarity)                  │
+│                              │                              │
+│                        Top-3 Chunks                         │
+│                              │                              │
+│                     Build Prompt (chunks + question)        │
+│                              │                              │
+│                       Groq LLM API                          │
+│                       (llama-3.1-8b)                        │
+│                              │                              │
+│                    Answer + Source Citations ◄──────────────┤
+└─────────────────────────────────────────────────────────────┘
+```
+
+---
+
+## ✨ Features
+
+| Feature | Detail |
+|---|---|
+| 📄 PDF ingestion | Extracts and chunks text from multiple PDFs |
+| 🧠 Local embeddings | `all-MiniLM-L6-v2` — runs on CPU, no API key |
+| 🗄️ Vector storage | ChromaDB — persistent on disk, no server needed |
+| 🤖 LLM generation | Groq's free API (llama-3.1-8b-instant) |
+| 🌐 Web UI | Streamlit app with source citations |
+| 💻 CLI | `python main.py "question"` for terminal use |
+| 🔒 Private | Your documents never leave your machine (only the final prompt goes to Groq) |
+
+---
+
+## 📁 Project Structure
 
 ```
 RAG-DocQA/
-├── documents/          ← Put your PDF files here (2-3 to start)
-├── chroma_db/          ← Auto-created by ingest.py; stores vectors on disk
-├── ingest.py           ← Steps 1-3: extract → chunk → embed → store
+├── app.py              ← 🌐 Streamlit web UI  (NEW)
+├── ingest.py           ← Step 1-3: PDF → chunks → embeddings → ChromaDB
 ├── query.py            ← Step 4: embed question → retrieve → LLM answer
-├── main.py             ← CLI wrapper (just calls query.py)
-├── requirements.txt
-├── .env.example        ← Template; copy to .env and add your Groq key
-└── README.md
+├── main.py             ← CLI: python main.py "your question"
+├── requirements.txt    ← All dependencies
+├── .env.example        ← API key template
+├── .gitignore          ← Keeps .env and chroma_db/ off GitHub
+├── documents/          ← Put your PDFs here
+└── chroma_db/          ← Auto-created by ingest.py (don't commit this)
 ```
 
 ---
 
-## Setup
+## 🚀 Setup & Usage
 
-### 1. Prerequisites
-
-- Python 3.10 or higher
-- A free Groq API key from [console.groq.com](https://console.groq.com)
-
-### 2. Install dependencies
+### 1. Install dependencies
 
 ```bash
 pip install -r requirements.txt
 ```
 
-> First install downloads the `all-MiniLM-L6-v2` model (~80 MB) automatically from HuggingFace.  
-> It's cached locally after that — no download on subsequent runs.
-
-### 3. Add your API key
+### 2. Set your API key
 
 ```bash
 # Windows
 copy .env.example .env
 
-# macOS / Linux
+# macOS/Linux
 cp .env.example .env
 ```
 
-Open `.env` and replace `your_groq_api_key_here` with your real key.
+Open `.env` and paste your free Groq API key from [console.groq.com](https://console.groq.com).
 
-### 4. Add PDF documents
+### 3. Add PDF documents
 
-Drop 2-3 PDF files into the `documents/` folder.  
-(Create the folder if it doesn't exist: `mkdir documents`)
+Drop your PDF files into the `documents/` folder.
 
-### 5. Ingest documents
+### 4. Ingest documents *(run once)*
 
 ```bash
 python ingest.py
 ```
 
-This reads your PDFs, splits them into ~500-character chunks with 50-char overlap,
-generates embeddings for each chunk, and saves everything to `chroma_db/`.
+This reads PDFs → splits into chunks → generates embeddings → saves to ChromaDB.  
+Only needs to be re-run when you add new documents.
 
-You only need to re-run this when you add or change documents.
-
-### 6. Ask a question
+### 5a. Launch Web UI *(recommended)*
 
 ```bash
-python main.py "What are the key findings?"
-python main.py "What is the refund policy?"
-python main.py "Summarize the methodology section"
+streamlit run app.py
+```
+
+Opens in your browser at `http://localhost:8501`
+
+### 5b. Use CLI *(alternative)*
+
+```bash
+python main.py "What are the key topics in module 1?"
 ```
 
 ---
 
-## How Each Part Works
+## 🧠 How RAG Works — Explained Simply
 
-### `ingest.py` — Build the knowledge base
+**Problem:** LLMs only know what they were trained on. They can't answer questions about *your* documents.
 
-| Step | What happens | Why |
-|------|-------------|-----|
-| **Extract** | `pdfplumber` reads each page and returns plain text | PDF is binary; we need raw text |
-| **Chunk** | Text is split every 500 chars, with 50-char overlap | LLMs have context limits; overlap prevents meaning loss at boundaries |
-| **Embed** | `all-MiniLM-L6-v2` converts each chunk → 384-number vector | Vectors capture *meaning*, enabling semantic search |
-| **Store** | ChromaDB saves vectors + text to disk | Persistent — no re-embedding on every query |
+**Solution:** RAG = give the LLM your documents as context at the time of the question.
 
-### `query.py` — Answer a question
+```
+Without RAG:  Question ──► LLM ──► Answer (from training data, may hallucinate)
 
-| Step | What happens | Why |
-|------|-------------|-----|
-| **Embed question** | Same model converts question → vector | Must use same model so vectors are comparable |
-| **Search** | ChromaDB finds top-3 chunks closest to question vector | Cosine similarity = angle between vectors = semantic closeness |
-| **Build prompt** | Retrieved chunks + question → formatted prompt | Grounds the LLM in real content; reduces hallucination |
-| **LLM call** | Groq runs `llama-3.1-8b-instant` with your prompt | Reads the context and writes a fluent, grounded answer |
+With RAG:     Question ──► Search Docs ──► Relevant Chunks ──► LLM ──► Grounded Answer
+```
 
-### `main.py` — CLI glue
-
-Parses `sys.argv`, calls `answer_question()`, and prints the answer + source citations.
+The LLM acts as a **reader**, not a **memorizer** — it reads your chunks and answers from them.
 
 ---
 
-## Configuration Cheatsheet
+## ⚙️ Key Design Decisions
 
-| Variable | File | Default | Change when… |
+| Decision | Reasoning |
+|---|---|
+| **500-char chunks** | Large enough for context, small enough for precise retrieval |
+| **50-char overlap** | Prevents meaning loss when sentences straddle chunk boundaries |
+| **Cosine similarity** | Measures semantic angle between vectors, independent of text length |
+| **Top-K = 3** | Enough context without overloading the LLM's window |
+| **all-MiniLM-L6-v2** | 80 MB, CPU-friendly, 384-dim vectors, fully free |
+| **temperature = 0.2** | Low creativity = factual, grounded answers |
+
+---
+
+## 🛠️ Configuration
+
+| Variable | File | Default | Adjust when… |
 |---|---|---|---|
-| `CHUNK_SIZE` | `ingest.py` | `500` chars | Answers feel too fragmented (increase) or off-topic (decrease) |
-| `OVERLAP` | `ingest.py` | `50` chars | Answers lose context at sentence boundaries (increase) |
-| `TOP_K` | `query.py` | `3` | Answers feel incomplete (increase to 5) |
-| `LLM_MODEL` | `query.py` | `llama-3.1-8b-instant` | Try `llama-3.1-70b-versatile` for harder questions |
-| `temperature` | `query.py` | `0.2` | Higher = more creative; lower = more precise |
+| `CHUNK_SIZE` | `ingest.py` | `500` | Answers too fragmented → increase |
+| `OVERLAP` | `ingest.py` | `50` | Context lost at boundaries → increase |
+| `TOP_K` | `query.py` | `3` | Answers incomplete → increase to 5 |
+| `LLM_MODEL` | `query.py` | `llama-3.1-8b-instant` | Need higher quality → use `llama-3.1-70b-versatile` |
+| `temperature` | `query.py` | `0.2` | Need creative answers → increase |
 
 ---
 
-## Example Output
-
-```
-────────────────────────────────────────────────────────────
-❓ Question: What is the refund policy?
-────────────────────────────────────────────────────────────
-🔍 Searching documents…
-
-💬 Answer:
-────────────────────────────────────────────────────────────
-According to the provided context, customers may request a full
-refund within 30 days of purchase, provided the item is unused
-and in its original packaging...
-────────────────────────────────────────────────────────────
-
-📚 Sources used (top 3):
-
-  [1] File: policy.pdf  |  Chunk #12  |  Similarity: 94.21%
-      Preview: "Refund Policy: Customers are entitled to a full refund within 30 days…"
-
-  [2] File: policy.pdf  |  Chunk #13  |  Similarity: 88.73%
-      Preview: "Exceptions to the refund policy include digital downloads and…"
-
-  [3] File: faq.pdf  |  Chunk #7  |  Similarity: 79.15%
-      Preview: "Q: Can I return a used item? A: Used items are not eligible for…"
-
-────────────────────────────────────────────────────────────
-```
-
----
-
-## Common Errors
+## 🔧 Troubleshooting
 
 | Error | Fix |
 |---|---|
-| `No PDF files found in 'documents'` | Add PDFs to the `documents/` folder |
+| `No PDF files found` | Add PDFs to `documents/` folder |
 | `Collection 'docs' not found` | Run `python ingest.py` first |
 | `GROQ_API_KEY not found` | Copy `.env.example` → `.env` and add your key |
 | `ModuleNotFoundError` | Run `pip install -r requirements.txt` |
 
 ---
 
-## Limitations (By Design)
+## 🗺️ What This Doesn't Include *(by design)*
 
-This is intentionally a **minimal, educational pipeline**. It does not include:
+This is an intentionally clean, educational pipeline. It does not include reranking, hybrid search, agents, or multi-hop retrieval — these are well-understood extensions once you understand the core loop.
 
-- **Reranking** — results are ranked purely by cosine similarity
-- **Hybrid search** — keyword search (BM25) is not combined with semantic search  
-- **Multi-hop retrieval** — only one retrieval step per question
-- **Agents** — no tool use or multi-step reasoning
+---
 
-These are well-understood extensions once you understand the core pipeline.
+## 📄 License
+
+MIT — free to use, modify, and learn from.
