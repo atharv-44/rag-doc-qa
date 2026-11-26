@@ -13,9 +13,9 @@ How it works:
   - The answer + sources are displayed in a clean layout
 """
 
-import os
 import streamlit as st
-from query import answer_question   # Reuses our existing RAG pipeline — no duplication
+from ingest import ingest_uploaded_files  # Reuses our existing PDF ingestion pipeline
+from query import answer_question         # Reuses our existing RAG pipeline — no duplication
 
 # ─────────────────────────────────────────────────────────────────────────────
 # PAGE CONFIG  — must be the FIRST Streamlit call in the file
@@ -69,6 +69,38 @@ with st.sidebar:
     st.image("https://img.icons8.com/fluency/96/document.png", width=60)
     st.title("RAG Doc Q&A")
     st.caption("Ask questions about your PDF documents using AI.")
+
+    st.divider()
+
+    st.markdown("### 📄 Upload Documents")
+    uploaded_files = st.file_uploader(
+        "Upload PDF(s)",
+        type=["pdf"],
+        accept_multiple_files=True,
+        help="Upload 1 or more PDFs here to chat with them immediately.",
+    )
+    replace_existing = st.checkbox(
+        "Replace existing documents",
+        value=True,
+        help="Checked = clear old PDFs so only the new upload is searched. "
+             "Unchecked = add to existing documents.",
+    )
+    if st.button("📥 Process PDF(s)", use_container_width=True):
+        if not uploaded_files:
+            st.warning("Please choose at least one PDF file first.")
+        else:
+            with st.spinner("Extracting text, chunking, and embedding…"):
+                try:
+                    summary = ingest_uploaded_files(
+                        uploaded_files,
+                        replace_existing=replace_existing,
+                    )
+                    st.success(
+                        f"Indexed {summary['num_chunks']} chunks from "
+                        f"{summary['num_files']} file(s)!"
+                    )
+                except Exception as e:
+                    st.error(f"Failed to process PDF(s): {e}")
 
     st.divider()
 
@@ -157,10 +189,9 @@ if ask_btn and question.strip():
     # ── Answer ───────────────────────────────────────────────────────────────
 
     st.markdown("### 💬 Answer")
-    st.markdown(
-        f'<div class="answer-box">{result["answer"]}</div>',
-        unsafe_allow_html=True,
-    )
+    # Use a native bordered container so Markdown (**bold**, bullets) renders cleanly
+    with st.container(border=True):
+        st.markdown(result["answer"])
 
     st.divider()
 

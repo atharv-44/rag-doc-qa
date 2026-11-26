@@ -9,9 +9,14 @@ Run this ONCE (or whenever you add new documents):
 """
 
 import os
+import sys
 import pdfplumber                          # Extracts text from PDF files
 import chromadb                            # Our local vector database
 from sentence_transformers import SentenceTransformer  # Free, local embedding model
+
+# Ensure Windows terminals (cp1252) don't crash on emoji/Unicode output
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
 # ─────────────────────────────────────────────
 # CONFIGURATION
@@ -35,15 +40,15 @@ OVERLAP       = 50    # Characters shared between consecutive chunks
 # STEP 1: EXTRACT TEXT FROM PDFs
 # ─────────────────────────────────────────────
 
-def extract_text_from_pdf(pdf_path: str) -> str:
+def extract_text_from_pdf(pdf_source) -> str:
     """
-    Opens a PDF and returns all its text as a single string.
+    Opens a PDF (file path or uploaded file object) and returns all its text.
 
     We use pdfplumber because it handles multi-column layouts and tables
     better than simpler libraries — it gives us cleaner text to work with.
     """
     text = ""
-    with pdfplumber.open(pdf_path) as pdf:
+    with pdfplumber.open(pdf_source) as pdf:
         for page in pdf.pages:
             page_text = page.extract_text()
             if page_text:                  # Some pages are images — skip them
@@ -147,6 +152,62 @@ def embed_and_store(chunks: list[dict], model: SentenceTransformer, collection):
     print(f"  ✅ Stored {len(chunks)} chunks in ChromaDB.")
 
 
+def get_or_reset_collection(client: chromadb.PersistentClient, reset: bool = False):
+    """
+    Returns the ChromaDB collection.
+
+    Why reset=True by default during full ingestion?
+    If you delete or replace a PDF in 'documents/', old chunks would otherwise
+    stay in ChromaDB forever and show up in search results. Deleting and
+    recreating the collection keeps ChromaDB 100% in sync with your current PDFs.
+    """
+    if reset:
+        try:
+            client.delete_collection(name=COLLECTION_NAME)
+        except Exception:
+            # Collection didn't exist yet (first run) — that's fine
+            pass
+
+    return client.get_or_create_collection(
+        name=COLLECTION_NAME,
+        # Cosine similarity measures the *angle* between vectors, not their length,
+        # so it focuses purely on meaning regardless of chunk length.
+        metadata={"hnsw:space": "cosine"},
+    )
+
+
+def ingest_uploaded_files(uploaded_files, replace_existing: bool = True) -> dict:
+    """
+    Ingests PDFs uploaded through the Streamlit UI (without needing to copy
+    files into the 'documents/' folder manually).
+
+    Returns a summary dict with file count, chunk count, and filenames.
+    """
+    documents = []
+    for uploaded_file in uploaded_files:
+        uploaded_file.seek(0)  # Ensure we read from the start of the file buffer
+        text = extract_text_from_pdf(uploaded_file)
+        documents.append({"source": uploaded_file.name, "text": text})
+
+    all_chunks = []
+    for doc in documents:
+        all_chunks.extend(split_into_chunks(doc["text"], doc["source"]))
+
+    if not all_chunks:
+        raise ValueError("No readable text found in the uploaded PDF(s).")
+
+    model = SentenceTransformer("all-MiniLM-L6-v2")
+    client = chromadb.PersistentClient(path=CHROMA_DIR)
+    collection = get_or_reset_collection(client, reset=replace_existing)
+    embed_and_store(all_chunks, model, collection)
+
+    return {
+        "num_files": len(documents),
+        "num_chunks": len(all_chunks),
+        "files": [doc["source"] for doc in documents],
+    }
+
+
 # ─────────────────────────────────────────────
 # MAIN — wire everything together
 # ─────────────────────────────────────────────
@@ -178,14 +239,8 @@ def main():
     print(f"\n🗄️  Connecting to ChromaDB at '{CHROMA_DIR}'…")
     client = chromadb.PersistentClient(path=CHROMA_DIR)
 
-    # get_or_create_collection: idempotent — safe to call multiple times
-    collection = client.get_or_create_collection(
-        name=COLLECTION_NAME,
-        # ChromaDB defaults to cosine similarity for text embeddings.
-        # Why cosine? It measures the *angle* between vectors, not their length,
-        # so it focuses purely on meaning regardless of chunk length.
-        metadata={"hnsw:space": "cosine"},
-    )
+    # Reset collection so ChromaDB always matches whatever is in documents/
+    collection = get_or_reset_collection(client, reset=True)
 
     # --- Embed + store ---
     print("\n📥 Embedding and storing chunks…")
